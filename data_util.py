@@ -14,18 +14,18 @@ import copy
 import io
 from torch.autograd import Variable
 
-def split_data(inputs, label, future, split_one = 1600, split_two = 1864):
+def split_data(inputs, label, future, window = 15,split_one = 1600, split_two = 1864):
 	'''Helper function for splitting data into train, validation and test splits.'''
 	input_train = inputs[:split_one,:]
-	input_val = inputs[split_one:split_two,:]
+	input_val = inputs[split_one+window:split_two,:]
 	input_test = inputs[split_two:,:]
 
 	future_train = future[:split_one,:]
-	future_val = future[split_one:split_two,:]
+	future_val = future[split_one+window:split_two,:]
 	future_test = future[split_two:,:]
 
 	lab_train = label[:split_one,:]
-	lab_val = label[split_one:split_two,:]
+	lab_val = label[split_one+window:split_two,:]
 	lab_test = label[split_two:,:]
 
 	return input_train, input_val, input_test, future_train, future_val, future_test, lab_train, lab_val, lab_test
@@ -134,12 +134,11 @@ class DataPreProcess():
 		return label_tens
 
 
-  # The original datasets have dimension [2015,125] whereby each stock has a representation of dimension 5 (so 25 stocks). 
-  # (Note the 0th dimension varies based on what we choose for the context and prediction window) 
-  # Since we have moved to doing single stock prediction, we have to modify the dataset accordingly. We want to take the training 
-  # subset of each stock and stack them into one single training set, and do the same for the validation and test sets. The splits are 1600 and 1900,
-  # meaning for a single portfolio the training set now has size 1600*25 = 40,000. This method executes this modification for us and 
-  # returns datasets using the custom dataset class.
+  '''The original datasets have dimension [2015,125] whereby each stock has a representation of dimension 5 (so 25 stocks). 
+  Since we have moved to doing single stock prediction, we have to modify the dataset accordingly. We want to take the training 
+  subset of each stock and stack them into one single training set, and do the same for the validation and test sets. The splits are 1600 and 1900,
+  meaning for a single portfolio the training set now has size 1600*25 = 40,000. This method executes this modification for us and 
+  returns datasets using the custom dataset class.'''
 
 
   # Here we use the y labels as the future sequence.
@@ -216,6 +215,7 @@ class Normalisation():
 		max_cols = []
 		min_cols = []
 
+		x = torch.log(x)
 		x = x.view(-1,self.d_model_e)
 		one,two = x.size()
 		x_norm = torch.zeros((one,two),dtype=torch.double)
@@ -230,11 +230,14 @@ class Normalisation():
 		x_norm = x_norm.view(-1,self.context_window,self.d_model_e)
 
 		price_max = max_cols[3]
-		price_min = min_cols[3]
-		return x_norm, price_max, price_min
+    		price_max = torch.exp(price_max)
+    		price_min = min_cols[3]
+    		price_min = torch.exp(price_min)
+    		return x_norm, price_max, price_min
 
 	def normal_future(self,y):
 		
+		y = torch.log(y)
 		y = y.view(-1,self.d_model_d)
 		max = torch.max(y,dim=0)[0]
 		min = torch.min(y,dim=0)[0]
